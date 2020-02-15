@@ -67,6 +67,20 @@ app.post('/scream', (req, res) => {
     })
 })
 
+const isEmail = (email) => {
+  const regEx = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/
+  if (email.match(regEx)) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+const isEmpty = (string) => {
+  if (string.trim() === '') return true;
+  else return false;
+}
+
 // Signup route
 app.post('/signup', (req, res) => {
   const newUser = {
@@ -75,6 +89,25 @@ app.post('/signup', (req, res) => {
     confirmPassword: req.body.confirmPassword,
     handle: req.body.handle,
   }
+
+  let errors = {};
+
+  // VALIDATION
+  if (isEmpty(newUser.email)) {
+    errors.email = 'Email must not be empty.'
+  } else if (!isEmail(newUser.email)) {
+    errors.email = 'Must be a valid email address.'
+  }
+
+  // We don't need to validate for the PRESENCE of certain keys in the JSON,
+  // since we're the only ones who will be consuming our own API endpoint, and
+  // we can handle all of that in the React.
+
+  if (isEmpty(newUser.password)) errors.password = 'Must not be empty.' // Shorthand `is then` syntax
+  if (newUser.password !== newUser.confirmPassword) errors.confirmPassword = 'Passwords must match.'
+  if (isEmpty(newUser.handle)) errors.handle = 'Must not be empty.' // Shorthand `is then` syntax
+
+  if (Object.keys(errors).length > 0) return res.status(400).json(errors)
 
   // Checking to see if the handle exists already
   let token, userId;
