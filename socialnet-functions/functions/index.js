@@ -45,13 +45,46 @@ app.get('/screams', (req, res) => {
 
 exports.api = functions.https.onRequest(app);
 
-app.post('/scream', (req, res) => {
+// MIDDLEWARE
+// A typical Middleware function demonstrating the architecture of req, res, next.
+const FBAuth = (req, res, next) => {
+  let idToken;
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    idToken = req.headers.authorization.split('Bearer ')[1]
+  } else {
+    console.error('No token found')
+    return res.status(403).json({ error: 'Unauthorized.' })
+  }
+
+  // Now we need to make sure the token was issued by our app and not created somewhere else
+  admin.auth().verifyIdToken(idToken)
+  .then(decodedToken => {
+    req.user = decodedToken;
+    console.log(decodedToken)
+    return db.collection('users')
+      .where('userId', '==', req.user.uid)
+      .limit(1)
+      .get()
+  })
+  .then(data => {
+    // user firebase api function data() to get the handle
+    req.user.handle = data.docs[0].data().handle
+    return next();
+  })
+  .catch(err => {
+    console.error('Error while verifying token', err)
+    return res.status(403).json(err); // Not like others, but oh well.
+  })
+}
+
+// Post one scream
+app.post('/scream', FBAuth, (req, res) => {
   if (req.method !== 'POST') {
     return res.status(400).json({error: 'Method not allowed.'})
   }
   const newScream = {
     body: req.body.body,
-    userHandle: req.body.userHandle,
+    userHandle: req.user.handle,
     // createdAt: db.Timestamp.fromDate(new Date())
     createdAt: new Date().toISOString()
   };
@@ -153,6 +186,33 @@ app.post('/signup', (req, res) => {
     })
 })
 
+app.post('/login', (req, res) => {
+  const user = {
+    email: req.body.email,
+    password: req.body.password
+  }
+
+  let errors = {}
+
+  if (isEmpty(user.email)) errors.email = 'Must not be empty'
+  if (isEmpty(user.password)) errors.password = 'Must not be empty'
+  if (Object.keys(errors).length > 0) return res.status(400).json(errors);
+
+  firebase.auth().signInWithEmailAndPassword(user.email, user.password)
+  .then(data => {
+    return data.user.getIdToken()
+  })
+  .then(token => {
+    return res.json({token})
+  })
+  .catch(err => {
+    if (err.code === 'auth/wrong-password') {
+      return res.status(403).json({ general: 'Wrong credentials. Please try again.'})
+    } else {
+      return res.status(500).json({error: err.code})
+    }
+  })
+})
 
 
 
